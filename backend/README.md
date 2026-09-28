@@ -1,28 +1,28 @@
 # AdaptiveShield RAG - Backend
 
-FastAPI backend service providing document ingestion, security signal analysis, adaptive threat monitoring, security-gated vector storage, and trust-aware RAG retrieval for the AdaptiveShield RAG system.
+FastAPI backend service providing document ingestion, security signal analysis, adaptive threat monitoring, security-gated vector storage, trust-aware RAG retrieval, and live stream attack simulation for the AdaptiveShield RAG system.
 
-> **Status:** Trust-Aware Retrieval & Basic RAG (Step 6 Complete). Ingested documents undergo multi-signal security triage (`SAFE`, `QUARANTINE`, `BLOCK`). Verified `SAFE` documents are segregated into a trusted ChromaDB collection, while `QUARANTINE` documents are placed in an isolated quarantine collection, and `BLOCK` documents are strictly rejected. The RAG retrieval pipeline queries **ONLY** the trusted collection, ensuring quarantined or poisoned content never influences downstream LLMs.
+> **Status:** Live Stream & Attack Simulator (Step 7 Complete). A synthetic attack simulator generates controlled streams (`normal`, `attack`, `mixed`) that flow directly through the live defense pipeline: Ingestion $\to$ Security Signal Analysis $\to$ Composite Risk Assessment $\to$ Assessment History Recording $\to$ Gated Vector Storage $\to$ Threat-State Monitoring. Quarantined and blocked documents are strictly isolated, and only verified safe knowledge enters the trusted vector store for RAG queries.
 
 ---
 
 ## Architecture Flow
 
 ```
-LIVE KNOWLEDGE STREAM
+ATTACK SIMULATOR (normal / attack / mixed)
         ↓
     INGESTION (SQLite)
         ↓
 SECURITY ANALYSIS & COMPOSITE RISK SCORING
         ↓
-      DECISION
-     /   |   \
-  SAFE   |   BLOCK (Strictly Rejected)
-   ↓     ↓
-Trusted  Quarantine
-Collection  Collection
+      DECISION ──→ ASSESSMENT HISTORY (SQLite)
+     /   |   \               ↓
+  SAFE   |   BLOCK       ATTACK VELOCITY
+   ↓     ↓   (Rejected)      ↓
+Trusted  Quarantine      THREAT STATE
+Store    Store           (NORMAL / ELEVATED / HIGH / CRITICAL)
    ↓
-TRUST-AWARE RETRIEVER (Queries ONLY Trusted Collection)
+TRUST-AWARE RETRIEVER (Queries ONLY Trusted Store)
    ↓
 CONTEXT BUILDER
    ↓
@@ -133,16 +133,35 @@ Base path: `/api/v1/rag`
 > - Raw SQLite tables
 > - Any unverified or pending knowledge
 
-#### Retrieval Example
+---
+
+### 5. Attack Simulator API (`/api/v1/simulation`)
+
+Base path: `/api/v1/simulation`
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/simulation/start` | Launch a controlled synthetic knowledge stream (`normal`, `attack`, `mixed`) |
+| `GET` | `/api/v1/simulation/status` | Retrieve current simulator running status and latest execution summary |
+
+#### Simulation Modes
+
+- **`normal`:** Simulates typical stream conditions with predominantly benign documents (`SAFE`). Attack velocity remains low, keeping threat state at `NORMAL` or `ELEVATED`.
+- **`attack`:** Simulates an active adversarial campaign with prompt injections, instruction overrides, and untrusted sources. High block and quarantine rates trigger `HIGH` or `CRITICAL` threat states.
+- **`mixed`:** Balanced stream containing both benign operational policies and adversarial probes.
+
+#### Simulation Example
 
 **Request:**
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/rag/retrieve \
+curl -X POST http://localhost:8000/api/v1/simulation/start \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "What is the corporate MFA policy?",
-    "top_k": 3
+    "mode": "attack",
+    "document_count": 10,
+    "attack_ratio": 0.8,
+    "delay_ms": 0
   }'
 ```
 
@@ -150,56 +169,17 @@ curl -X POST http://localhost:8000/api/v1/rag/retrieve \
 
 ```json
 {
-  "query": "What is the corporate MFA policy?",
-  "retrieved_count": 1,
-  "results": [
-    {
-      "document_id": "c1f7b8d2-...",
-      "title": "Corporate Multi-Factor Authentication Policy",
-      "content": "All company personnel must authenticate using FIDO2 hardware security keys...",
-      "source": "https://infosec.corp.internal/mfa-policy",
-      "source_type": "internal",
-      "timestamp": "2026-09-28T18:00:00Z",
-      "decision": "SAFE",
-      "risk_score": 0.05,
-      "distance": 0.1245
-    }
-  ]
-}
-```
-
-#### RAG Query Example
-
-**Request:**
-
-```bash
-curl -X POST http://localhost:8000/api/v1/rag/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What are the MFA requirements for employees?"
-  }'
-```
-
-**Response (`200 OK`):**
-
-```json
-{
-  "query": "What are the MFA requirements for employees?",
-  "answer": "LLM is not configured. Here are the trusted retrieved sources:\n\n[1] Corporate Multi-Factor Authentication Policy (Source: https://infosec.corp.internal/mfa-policy)\nAll company personnel must authenticate using FIDO2 hardware security keys...",
-  "sources": [
-    {
-      "document_id": "c1f7b8d2-...",
-      "title": "Corporate Multi-Factor Authentication Policy",
-      "content": "All company personnel must authenticate using FIDO2 hardware security keys...",
-      "source": "https://infosec.corp.internal/mfa-policy",
-      "source_type": "internal",
-      "timestamp": "2026-09-28T18:00:00Z",
-      "decision": "SAFE",
-      "risk_score": 0.05,
-      "distance": 0.1245
-    }
-  ],
-  "retrieved_count": 1
+  "simulation_id": "7f8b9e2c-3d4a-4f5b-b91c-2e3f4a5b6c7d",
+  "mode": "attack",
+  "total_generated": 10,
+  "safe_count": 2,
+  "quarantine_count": 4,
+  "block_count": 4,
+  "average_risk_score": 0.584,
+  "current_threat_state": "CRITICAL",
+  "attack_velocity": 0.8000,
+  "duration_ms": 235.40,
+  "documents": [ ... ]
 }
 ```
 
@@ -230,13 +210,11 @@ LLM_API_KEY=your-api-key-here
 LLM_MODEL=gpt-4o-mini
 ```
 
-If `LLM_API_KEY` is omitted or empty, the RAG query pipeline operates in zero-dependency fallback mode, returning trusted citations and extracted knowledge without errors.
-
 ---
 
 ## Running Tests
 
-Run the complete test suite (71 tests across ingestion, security heuristics, composite risk, threat velocity, vector segregation, and trust-aware RAG):
+Run the complete test suite (81 tests across ingestion, security heuristics, composite risk, threat velocity, vector segregation, trust-aware RAG, and attack simulation):
 
 ```bash
 pytest -v backend

@@ -25,6 +25,13 @@ from app.models.security_decision import (
     SecurityDecision,
     SecurityDecisionResult,
 )
+from app.models.simulation import (
+    SimulationDocumentItem,
+    SimulationMode,
+    SimulationRequest,
+    SimulationResult,
+    SimulationStatusResponse,
+)
 from app.models.threat_state import (
     ThreatState,
     ThreatStateResult,
@@ -47,6 +54,11 @@ __all__ = [
     "SecurityAnalysisResult",
     "SecurityDecision",
     "SecurityDecisionResult",
+    "SimulationDocumentItem",
+    "SimulationMode",
+    "SimulationRequest",
+    "SimulationResult",
+    "SimulationStatusResponse",
     "StorageDestination",
     "ThreatState",
     "ThreatStateResult",

@@ -7,6 +7,7 @@ from app.api.documents import router as documents_router
 from app.api.knowledge import router as knowledge_router
 from app.api.rag import router as rag_router
 from app.api.security import router as security_router
+from app.api.simulation import router as simulation_router
 from app.config import settings
 from app.database import init_db
 
@@ -30,6 +31,7 @@ app.include_router(documents_router, prefix="/api/v1")
 app.include_router(security_router, prefix="/api/v1")
 app.include_router(knowledge_router, prefix="/api/v1")
 app.include_router(rag_router, prefix="/api/v1")
+app.include_router(simulation_router, prefix="/api/v1")
 
 
 @app.get("/", tags=["General"])
