@@ -1,8 +1,35 @@
 # AdaptiveShield RAG - Backend
 
-FastAPI backend service providing document ingestion, security signal analysis, and composite risk triage for the AdaptiveShield RAG system.
+FastAPI backend service providing document ingestion, security signal analysis, adaptive threat monitoring, security-gated vector storage, and trust-aware RAG retrieval for the AdaptiveShield RAG system.
 
-> **Status:** Composite Risk Scoring & Security Decision Engine (Step 3B). Ingested documents (initial status `PENDING`) can be evaluated across multi-signal heuristics, yielding an explainable composite risk score and triage decision (`SAFE`, `QUARANTINE`, `BLOCK`). Embeddings, vector storage, and automated state transitions are not yet active.
+> **Status:** Trust-Aware Retrieval & Basic RAG (Step 6 Complete). Ingested documents undergo multi-signal security triage (`SAFE`, `QUARANTINE`, `BLOCK`). Verified `SAFE` documents are segregated into a trusted ChromaDB collection, while `QUARANTINE` documents are placed in an isolated quarantine collection, and `BLOCK` documents are strictly rejected. The RAG retrieval pipeline queries **ONLY** the trusted collection, ensuring quarantined or poisoned content never influences downstream LLMs.
+
+---
+
+## Architecture Flow
+
+```
+LIVE KNOWLEDGE STREAM
+        ↓
+    INGESTION (SQLite)
+        ↓
+SECURITY ANALYSIS & COMPOSITE RISK SCORING
+        ↓
+      DECISION
+     /   |   \
+  SAFE   |   BLOCK (Strictly Rejected)
+   ↓     ↓
+Trusted  Quarantine
+Collection  Collection
+   ↓
+TRUST-AWARE RETRIEVER (Queries ONLY Trusted Collection)
+   ↓
+CONTEXT BUILDER
+   ↓
+LLM GENERATION (with graceful unconfigured fallback)
+   ↓
+ANSWER + CITED SOURCES
+```
 
 ---
 
@@ -35,7 +62,7 @@ Activate the virtual environment:
 
 ### 3. Install Dependencies
 
-Install the foundational backend requirements:
+Install backend requirements:
 
 ```bash
 pip install -r requirements.txt
@@ -56,11 +83,9 @@ Once running, access:
 
 ---
 
-## Document Ingestion API
+## API Reference
 
-Base path: `/api/v1/documents`
-
-### Endpoints
+### 1. Document Ingestion API (`/api/v1/documents`)
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -71,103 +96,148 @@ Base path: `/api/v1/documents`
 
 ---
 
-## Security Signal Analysis & Decision API
-
-Base path: `/api/v1/security`
-
-### Endpoints
+### 2. Security Analysis & Threat State API (`/api/v1/security`)
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/v1/security/analyze/{document_id}` | Runs multi-signal heuristic analysis on an ingested document (intermediate signals only) |
-| `POST` | `/api/v1/security/assess/{document_id}` | Assesses composite risk score and evaluates triage decision (`SAFE`, `QUARANTINE`, `BLOCK`) |
+| `POST` | `/api/v1/security/analyze/{document_id}` | Runs multi-signal heuristic analysis on an ingested document |
+| `POST` | `/api/v1/security/assess/{document_id}` | Evaluates composite risk score and triage decision (`SAFE`, `QUARANTINE`, `BLOCK`) |
+| `GET` | `/api/v1/security/threat-state` | Returns rolling attack velocity, block rate, and global threat state (`NORMAL`, `ELEVATED`, `HIGH`, `CRITICAL`) |
 
-### Difference Between Signals and Decisions
+---
 
-- **Security Signals (`/analyze`):** Transparent intermediate metrics representing specific heuristic observations (`injection_score`, `source_risk_score`, `content_anomaly_score`). They do not compute composite risk or apply access control policies.
-- **Security Decisions (`/assess`):** Evaluates all signals through a normalized composite scoring model and compares the score against configurable thresholds to produce an operational triage outcome (`SAFE`, `QUARANTINE`, or `BLOCK`). Assessment does **not** mutate the document's stored status.
+### 3. Security-Gated Knowledge Storage API (`/api/v1/knowledge`)
 
-### Assessment Example
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/knowledge/index/{document_id}` | Evaluates triage and indexes into segregated vector store (`SAFE` → Trusted, `QUARANTINE` → Quarantine, `BLOCK` → Rejected) |
+| `GET` | `/api/v1/knowledge/{document_id}` | Looks up indexed document across vector collections |
+| `GET` | `/api/v1/knowledge/stats` | Returns counts and metadata for trusted and quarantined collections |
+
+---
+
+### 4. Trust-Aware Retrieval & Basic RAG API (`/api/v1/rag`)
+
+Base path: `/api/v1/rag`
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/rag/retrieve` | Trust-aware vector search querying **ONLY** the trusted collection |
+| `POST` | `/api/v1/rag/query` | Complete RAG workflow: retrieve trusted context → build prompt → generate answer |
+
+#### Critical Security Invariant
+
+> **CRITICAL:** The retrieval layer is strictly bound to `trusted_collection`. It **NEVER** queries or searches:
+> - The quarantine collection
+> - Blocked documents
+> - Raw SQLite tables
+> - Any unverified or pending knowledge
+
+#### Retrieval Example
 
 **Request:**
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/security/assess/e6a1005f-fc8c-4a57-b08e-8a032d84950d
+curl -X POST http://localhost:8000/api/v1/rag/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is the corporate MFA policy?",
+    "top_k": 3
+  }'
 ```
 
 **Response (`200 OK`):**
 
 ```json
 {
-    "document_id": "e6a1005f-fc8c-4a57-b08e-8a032d84950d",
-    "injection_score": 0.0,
-    "source_risk_score": 0.40,
-    "content_anomaly_score": 0.0,
-    "risk_score": 0.10,
-    "decision": "SAFE",
-    "signals": [
-        "source_medium_trust"
-    ],
-    "explanations": [
-        "Source type 'wiki' is categorized as medium-trust.",
-        "Composite risk score (0.10) remained below the QUARANTINE threshold (0.40). Decision: SAFE."
-    ]
+  "query": "What is the corporate MFA policy?",
+  "retrieved_count": 1,
+  "results": [
+    {
+      "document_id": "c1f7b8d2-...",
+      "title": "Corporate Multi-Factor Authentication Policy",
+      "content": "All company personnel must authenticate using FIDO2 hardware security keys...",
+      "source": "https://infosec.corp.internal/mfa-policy",
+      "source_type": "internal",
+      "timestamp": "2026-09-28T18:00:00Z",
+      "decision": "SAFE",
+      "risk_score": 0.05,
+      "distance": 0.1245
+    }
+  ]
+}
+```
+
+#### RAG Query Example
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:8000/api/v1/rag/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the MFA requirements for employees?"
+  }'
+```
+
+**Response (`200 OK`):**
+
+```json
+{
+  "query": "What are the MFA requirements for employees?",
+  "answer": "LLM is not configured. Here are the trusted retrieved sources:\n\n[1] Corporate Multi-Factor Authentication Policy (Source: https://infosec.corp.internal/mfa-policy)\nAll company personnel must authenticate using FIDO2 hardware security keys...",
+  "sources": [
+    {
+      "document_id": "c1f7b8d2-...",
+      "title": "Corporate Multi-Factor Authentication Policy",
+      "content": "All company personnel must authenticate using FIDO2 hardware security keys...",
+      "source": "https://infosec.corp.internal/mfa-policy",
+      "source_type": "internal",
+      "timestamp": "2026-09-28T18:00:00Z",
+      "decision": "SAFE",
+      "risk_score": 0.05,
+      "distance": 0.1245
+    }
+  ],
+  "retrieved_count": 1
 }
 ```
 
 ---
 
-## Composite Risk Scoring & Triage Logic
+## Configuration
 
-### Scoring Formula
+Settings are managed via environment variables or a `.env` file:
 
-The prototype uses a transparent weighted scoring model:
-
-| Signal | Planned Weight | MVP Active Weight | Role |
-| :--- | :--- | :--- | :--- |
-| **Prompt Injection** | 0.40 | 0.40 | Detects instruction overrides, system directives, and prompt leakage |
-| **Source Provenance** | 0.20 | 0.20 | Assesses risk based on source type and provenance metadata |
-| **Content Anomaly** | 0.20 | 0.20 | Flags control tokens, excessive repetition, and imperative density |
-| **Reserved Signals** | 0.20 | *(unassigned)* | Reserved for contradiction and attack-velocity signals in streaming phase |
-
-> **Note on MVP Normalization:** The current MVP uses three deterministic security signals. Contradiction and attack-velocity signals are planned for the adaptive streaming phase.
-
-Active signals are normalized over the active weight sum ($0.40 + 0.20 + 0.20 = 0.80$):
-
-$$\text{risk\_score} = \frac{0.40 \cdot \text{injection\_score} + 0.20 \cdot \text{source\_risk\_score} + 0.20 \cdot \text{content\_anomaly\_score}}{0.80}$$
-
-The resulting `risk_score` is strictly bounded between `0.0` (zero observed risk) and `1.0` (maximal threat indicators).
-
-### Decision Thresholds
-
-Triage outcomes are mapped via configurable environment variables:
-
-- **SAFE (`risk_score < 0.40`):** Minimal indicators. Eligible for future ingestion into trusted vector stores.
-- **QUARANTINE (`0.40 <= risk_score < 0.70`):** Elevated risk or suspicious source/instruction combination. Isolated for secondary analysis or manual review.
-- **BLOCK (`risk_score >= 0.70`):** High composite risk. Document presents significant injection patterns or structural anomalies.
-
-*Configuration variables (`.env.example` / `config.py`):*
 ```env
+# Database & Vector Storage
+SQLITE_DB_PATH=data/adaptiveshield.db
+VECTOR_DB_DIR=data/vector_store
+EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+TRUSTED_COLLECTION_NAME=trusted_knowledge
+QUARANTINE_COLLECTION_NAME=quarantined_knowledge
+
+# Security Triage Thresholds
 RISK_THRESHOLD_QUARANTINE=0.40
 RISK_THRESHOLD_BLOCK=0.70
+
+# Threat State Window
+ATTACK_VELOCITY_WINDOW_SECONDS=300
+
+# LLM & RAG Configuration (Optional)
+LLM_PROVIDER=openai
+LLM_API_KEY=your-api-key-here
+LLM_MODEL=gpt-4o-mini
 ```
 
-*Statement:* These threshold boundaries are prototype heuristic parameters and do not represent scientifically optimal security barriers.
-
----
-
-## Limitations
-
-- The decision engine relies on heuristic signal weights and static thresholds. It does not completely prevent poisoning, sophisticated semantic attacks, or zero-day prompt injection evasions.
-- Low-trust sources contribute risk but do not independently trigger a `BLOCK` without accompanying content anomalies or injection markers.
-- Multi-layer defense-in-depth, semantic contradiction detection, and adaptive rate-limiting are planned for future development phases.
+If `LLM_API_KEY` is omitted or empty, the RAG query pipeline operates in zero-dependency fallback mode, returning trusted citations and extracted knowledge without errors.
 
 ---
 
 ## Running Tests
 
-Run the test suite with pytest from the `backend/` directory:
+Run the complete test suite (71 tests across ingestion, security heuristics, composite risk, threat velocity, vector segregation, and trust-aware RAG):
 
 ```bash
-pytest
+pytest -v backend
 ```

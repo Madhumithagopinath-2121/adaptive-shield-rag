@@ -12,6 +12,14 @@ from app.models.knowledge import (
     KnowledgeStatsResult,
     StorageDestination,
 )
+from app.models.rag import (
+    RAGQueryRequest,
+    RAGQueryResponse,
+    RAGSourceItem,
+    RetrievalRequest,
+    RetrievalResponse,
+    RetrievalResultItem,
+)
 from app.models.security import SecurityAnalysisResult
 from app.models.security_decision import (
     SecurityDecision,
@@ -30,6 +38,12 @@ __all__ = [
     "KnowledgeDocumentItem",
     "KnowledgeIndexResult",
     "KnowledgeStatsResult",
+    "RAGQueryRequest",
+    "RAGQueryResponse",
+    "RAGSourceItem",
+    "RetrievalRequest",
+    "RetrievalResponse",
+    "RetrievalResultItem",
     "SecurityAnalysisResult",
     "SecurityDecision",
     "SecurityDecisionResult",

@@ -1,5 +1,7 @@
 """Application configuration management using Pydantic Settings."""
 
+from typing import Optional
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -31,6 +33,12 @@ class Settings(BaseSettings):
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     trusted_collection_name: str = "trusted_knowledge"
     quarantine_collection_name: str = "quarantined_knowledge"
+
+    # LLM & RAG Configuration
+    llm_provider: str = ""
+    llm_api_key: str = ""
+    llm_model: str = "gpt-4o-mini"
+    llm_base_url: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_thresholds(self) -> "Settings":
