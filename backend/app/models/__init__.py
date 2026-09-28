@@ -6,6 +6,12 @@ from app.models.document import (
     DocumentStatus,
     DocumentStatusUpdate,
 )
+from app.models.knowledge import (
+    KnowledgeDocumentItem,
+    KnowledgeIndexResult,
+    KnowledgeStatsResult,
+    StorageDestination,
+)
 from app.models.security import SecurityAnalysisResult
 from app.models.security_decision import (
     SecurityDecision,
@@ -21,9 +27,13 @@ __all__ = [
     "DocumentCreate",
     "DocumentStatus",
     "DocumentStatusUpdate",
+    "KnowledgeDocumentItem",
+    "KnowledgeIndexResult",
+    "KnowledgeStatsResult",
     "SecurityAnalysisResult",
     "SecurityDecision",
     "SecurityDecisionResult",
+    "StorageDestination",
     "ThreatState",
     "ThreatStateResult",
 ]

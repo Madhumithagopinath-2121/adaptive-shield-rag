@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     threat_threshold_critical_velocity: float = 0.50
     threat_threshold_critical_block_rate: float = 0.30
 
+    # Vector Storage and Embedding Configuration
+    vector_db_dir: str = "data/vector_store"
+    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    trusted_collection_name: str = "trusted_knowledge"
+    quarantine_collection_name: str = "quarantined_knowledge"
+
     @model_validator(mode="after")
     def validate_thresholds(self) -> "Settings":
         """Validate that 0.0 <= quarantine < block <= 1.0."""

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.documents import router as documents_router
+from app.api.knowledge import router as knowledge_router
 from app.api.security import router as security_router
 from app.config import settings
 from app.database import init_db
@@ -26,6 +27,7 @@ app = FastAPI(
 # Mount API routers
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(security_router, prefix="/api/v1")
+app.include_router(knowledge_router, prefix="/api/v1")
 
 
 @app.get("/", tags=["General"])
@@ -35,7 +37,7 @@ def read_root():
         "service": settings.app_name,
         "version": "0.1.0",
         "status": "prototype_foundation",
-        "description": "Backend foundation initialized with document ingestion and security signal analysis layers.",
+        "description": "Backend foundation initialized with document ingestion, security analysis, and gated knowledge storage.",
     }
 
 
