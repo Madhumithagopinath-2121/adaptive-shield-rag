@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.documents import router as documents_router
 from app.api.knowledge import router as knowledge_router
@@ -24,6 +25,18 @@ app = FastAPI(
     description="Adaptive security layer foundation for continuously updating RAG knowledge streams (Initial Prototype).",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+# Allow CORS requests from frontend development server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount API routers
